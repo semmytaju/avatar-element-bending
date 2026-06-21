@@ -25,5 +25,5 @@ Master the four elements using the power of computer vision! This interactive we
 ## 📥 How to Install & Run Locally
 
    ```bash
-   git clone https://github.com/YOUR_USERNAME/avatar-element-bending.git
+   git clone https://github.com/semmytaju/avatar-element-bending.git
    cd avatar-element-bending
