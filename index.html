@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Avatar Element Bending Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Segoe+UI&display=swap" rel="stylesheet">
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+            background: #111;
+            color: white;
+        }
+
+        /* Dynamic Backgrounds based on Element */
+        body.fire-mode { background: linear-gradient(135deg, #2c0e0e 0%, #4a1c1c 100%); }
+        body.water-mode { background: linear-gradient(135deg, #0c1e2c 0%, #1c3a4a 100%); }
+        body.air-mode { background: linear-gradient(135deg, #2c2c2c 0%, #4a4a4a 100%); }
+        body.earth-mode { background: linear-gradient(135deg, #1c2c0e 0%, #2e4a1c 100%); }
+
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+
+        #videoContainer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: none;
+            z-index: 0;
+        }
+
+        #inputVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            opacity: 0.15; /* Subtle video background */
+        }
+
+        #ui {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-width: 300px;
+            font-family: 'Cinzel', serif;
+        }
+
+        h1 {
+            font-size: 22px;
+            margin-bottom: 15px;
+            text-align: center;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .element-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .elem-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: 'Segoe UI', sans-serif;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .elem-btn:hover { background: rgba(255, 255, 255, 0.2); }
+        
+        .elem-btn.active-fire { background: rgba(255, 69, 0, 0.6); border-color: #FF4500; box-shadow: 0 0 15px #FF4500; }
+        .elem-btn.active-water { background: rgba(0, 191, 255, 0.6); border-color: #00BFFF; box-shadow: 0 0 15px #00BFFF; }
+        .elem-btn.active-air { background: rgba(255, 255, 255, 0.6); border-color: #FFF; box-shadow: 0 0 15px #FFF; color: #333; }
+        .elem-btn.active-earth { background: rgba(139, 69, 19, 0.6); border-color: #8B4513; box-shadow: 0 0 15px #8B4513; }
+
+        .btn-main {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            margin-bottom: 10px;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        .btn-main.stop { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+
+        #status {
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 12px;
+            color: #aaa;
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            display: none;
+            z-index: 200;
+            text-align: center;
+            font-family: 'Cinzel', serif;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="fire-mode"> <!-- Default Mode -->
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>Connecting to Spirit World...</div>
+    </div>
+
+    <div id="ui">
+        <h1>🌏 Element Bending</h1>
+        
+        <div class="element-selector">
+            <button class="elem-btn active-fire" onclick="setElement('fire')">🔥 Fire</button>
+            <button class="elem-btn" onclick="setElement('water')">🌊 Water</button>
+            <button class="elem-btn" onclick="setElement('air')">🌪️ Air</button>
+            <button class="elem-btn" onclick="setElement('earth')">🪨 Earth</button>
+        </div>
+
+        <button class="btn-main" id="startBtn" onclick="startCamera()">▶ Start Camera</button>
+        <button class="btn-main stop" id="stopBtn" onclick="stopCamera()" style="display: none;">⏹ Stop Camera</button>
+        
+        <div id="status">Status: Ready to Bend</div>
+    </div>
+
+    <div id="videoContainer">
+        <video id="inputVideo" playsinline></video>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script>
+        let hands;
+        let camera;
+        let videoElement;
+        let isRunning = false;
+        let currentElement = 'fire';
+        
+        // Hand Tracking Data
+        let handX = 0.5;
+        let handY = 0.5;
+        let handDetected = false;
+
+        function setup() {
+            let canvas = createCanvas(windowWidth, windowHeight);
+            canvas.parent('canvas-container');
+            frameRate(60);
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+        }
+
+        function draw() {
+            clear(); // Transparent background to see CSS gradient
+
+            if (handDetected) {
+                // Map hand coordinates (0-1) to canvas
+                let targetX = handX * width;
+                let targetY = handY * height;
+
+                switch(currentElement) {
+                    case 'fire':
+                        drawFire(targetX, targetY);
+                        break;
+                    case 'water':
+                        drawWater(targetX, targetY);
+                        break;
+                    case 'air':
+                        drawAir(targetX, targetY);
+                        break;
+                    case 'earth':
+                        drawEarth(targetX, targetY);
+                        break;
+                }
+            }
+        }
+
+        // 1. FIRE BENDING
+        let fireParticles = [];
+        function drawFire(x, y) {
+            // Add new particles
+            for(let i=0; i<5; i++) {
+                fireParticles.push(new FireParticle(x, y));
+            }
+
+            // Update and draw
+            for (let i = fireParticles.length - 1; i >= 0; i--) {
+                let p = fireParticles[i];
+                p.update();
+                p.display();
+                if (p.isDead()) fireParticles.splice(i, 1);
+            }
+        }
+
+        class FireParticle {
+            constructor(x, y) {
+                this.pos = createVector(x, y);
+                this.vel = p5.Vector.random2D();
+                this.vel.mult(random(0.5, 2));
+                this.vel.y -= random(1, 3); // Move up
+                this.life = 255;
+                this.size = random(10, 25);
+            }
+            update() {
+                this.pos.add(this.vel);
+                this.life -= 8;
+                this.size *= 0.95;
+            }
+            display() {
+                noStroke();
+                // Color from Yellow -> Orange -> Red -> Transparent
+                let r = 255;
+                let g = map(this.life, 0, 255, 0, 200);
+                let b = 0;
+                fill(r, g, b, this.life);
+                ellipse(this.pos.x, this.pos.y, this.size);
+            }
+            isDead() { return this.life < 0; }
+        }
+
+        // 2. WATER BENDING
+        let waterParticles = [];
+        function drawWater(x, y) {
+            for(let i=0; i<3; i++) {
+                waterParticles.push(new WaterParticle(x, y));
+            }
+
+            for (let i = waterParticles.length - 1; i >= 0; i--) {
+                let p = waterParticles[i];
+                p.update();
+                p.display();
+                if (p.isDead()) waterParticles.splice(i, 1);
+            }
+        }
+
+        class WaterParticle {
+            constructor(x, y) {
+                this.pos = createVector(x, y);
+                this.vel = createVector(random(-2, 2), random(-1, 1));
+                this.life = 255;
+                this.size = random(5, 15);
+                this.angle = random(TWO_PI);
+            }
+            update() {
+                this.pos.add(this.vel);
+                this.pos.x += sin(this.angle) * 2; // Wavy motion
+                this.angle += 0.1;
+                this.life -= 3;
+            }
+            display() {
+                noStroke();
+                fill(0, 191, 255, this.life * 0.6);
+                ellipse(this.pos.x, this.pos.y, this.size);
+                
+                // Highlight
+                fill(255, 255, 255, this.life * 0.3);
+                ellipse(this.pos.x - 2, this.pos.y - 2, this.size * 0.3);
+            }
+            isDead() { return this.life < 0; }
+        }
+
+        // 3. AIR BENDING
+        let airParticles = [];
+        function drawAir(x, y) {
+            for(let i=0; i<4; i++) {
+                airParticles.push(new AirParticle(x, y));
+            }
+
+            for (let i = airParticles.length - 1; i >= 0; i--) {
+                let p = airParticles[i];
+                p.update();
+                p.display();
+                if (p.isDead()) airParticles.splice(i, 1);
+            }
+        }
+
+        class AirParticle {
+            constructor(x, y) {
+                this.pos = createVector(x, y);
+                this.vel = p5.Vector.random2D();
+                this.vel.mult(random(3, 6)); // Fast
+                this.life = 255;
+                this.size = random(2, 8);
+            }
+            update() {
+                this.pos.add(this.vel);
+                this.life -= 5;
+            }
+            display() {
+                noStroke();
+                fill(255, 255, 255, this.life * 0.4);
+                ellipse(this.pos.x, this.pos.y, this.size);
+            }
+            isDead() { return this.life < 0; }
+        }
+
+        // 4. EARTH BENDING
+        let earthParticles = [];
+        function drawEarth(x, y) {
+            for(let i=0; i<2; i++) {
+                earthParticles.push(new EarthParticle(x, y));
+            }
+
+            for (let i = earthParticles.length - 1; i >= 0; i--) {
+                let p = earthParticles[i];
+                p.update();
+                p.display();
+                if (p.isDead()) earthParticles.splice(i, 1);
+            }
+        }
+
+        class EarthParticle {
+            constructor(x, y) {
+                this.pos = createVector(x + random(-20, 20), y + random(-20, 20));
+                this.vel = createVector(random(-1, 1), random(-2, 0)); // Initial burst up/out
+                this.acc = createVector(0, 0.2); // Gravity
+                this.life = 255;
+                this.size = random(8, 20);
+                this.color = random() > 0.5 ? color(139, 69, 19) : color(34, 139, 34); // Brown or Green
+            }
+            update() {
+                this.vel.add(this.acc);
+                this.pos.add(this.vel);
+                this.life -= 2;
+            }
+            display() {
+                noStroke();
+                fill(red(this.color), green(this.color), blue(this.color), this.life);
+                rect(this.pos.x, this.pos.y, this.size, this.size); // Square rocks
+            }
+            isDead() { return this.life < 0 || this.pos.y > height; }
+        }
+		
+        function init() {
+            videoElement = document.getElementById('inputVideo');
+        }
+
+        async function startCamera() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('status').textContent = 'Status: Connecting...';
+            
+            try {
+                hands = new Hands({
+                    locateFile: (path) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${path}`
+                });
+                
+                hands.setOptions({
+                    maxNumHands: 2,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+                
+                hands.onResults(onResults);
+                
+                camera = new Camera(videoElement, {
+                    onFrame: async () => { await hands.send({image: videoElement}); },
+                    width: 1280,
+                    height: 720
+                });
+                
+                await camera.start();
+                
+                document.getElementById('videoContainer').style.display = 'block';
+                document.getElementById('startBtn').style.display = 'none';
+                document.getElementById('stopBtn').style.display = 'block';
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('status').textContent = 'Status: Bending Active';
+                
+                isRunning = true;
+                
+            } catch (error) {
+                console.error(error);
+                document.getElementById('loading').style.display = 'none';
+                alert('Error accessing camera.');
+            }
+        }
+
+        function stopCamera() {
+            if (camera) camera.stop();
+            document.getElementById('videoContainer').style.display = 'none';
+            document.getElementById('startBtn').style.display = 'block';
+            document.getElementById('stopBtn').style.display = 'none';
+            document.getElementById('status').textContent = 'Status: Stopped';
+            isRunning = false;
+            handDetected = false;
+        }
+
+        function onResults(results) {
+            if (!isRunning) return;
+            
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                // Use the first detected hand (Right Hand usually best for bending)
+                const landmarks = results.multiHandLandmarks[0];
+                const indexTip = landmarks[8]; // Index finger tip
+                
+                // Flip X for mirror effect
+                handX = 1 - indexTip.x;
+                handY = indexTip.y;
+                
+                handDetected = true;
+            } else {
+                handDetected = false;
+            }
+        }
+
+        function setElement(elem) {
+            currentElement = elem;
+            
+            // Update Body Class for Background
+            document.body.className = '';
+            document.body.classList.add(elem + '-mode');
+            
+            // Update Buttons
+            document.querySelectorAll('.elem-btn').forEach(btn => {
+                btn.className = 'elem-btn'; // Reset
+            });
+            
+            // Set Active Class
+            const activeBtn = Array.from(document.querySelectorAll('.elem-btn')).find(b => b.innerText.toLowerCase().includes(elem));
+            if(activeBtn) activeBtn.classList.add('active-' + elem);
+            
+            // Clear existing particles for clean switch
+            fireParticles = [];
+            waterParticles = [];
+            airParticles = [];
+            earthParticles = [];
+        }
+
+        window.addEventListener('load', init);
+
+    </script>
+</body>
+</html>
